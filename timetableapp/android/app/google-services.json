@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "789248477773",
+    "project_id": "timetableapp-6eeff",
+    "storage_bucket": "timetableapp-6eeff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789248477773:android:e6a86941825ae39c28aa04",
+        "android_client_info": {
+          "package_name": "com.limupani.timetableapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn20l_QHTwPcONPpUp_veXraVsOy7_toI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
