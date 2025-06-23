@@ -52,10 +52,10 @@
 // //   }
 
 import 'package:flutter/material.dart';
-import 'package:timetableapp/screens/custom_selection_bar.dart';
-import 'package:timetableapp/screens/timetable_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:provider/provider.dart';
+import 'package:Track/screens/custom_selection_bar.dart';
+import 'package:Track/screens/timetable_screen.dart';
+import 'package:Track/providers/course_provider.dart';
 
 class AddCoursesScreen extends StatefulWidget {
   final List<String>? selectedCourses;
@@ -70,156 +70,100 @@ class _AddCoursesScreenState extends State<AddCoursesScreen> {
   String selectedDegree = "";
   String selectedSemester = "";
   String selectedSection = "";
-
-  List<Map<String, dynamic>> allCourses = [
-    {
-      "degree": "BCS",
-      "semester": "Semester 5",
-      "section": "M",
-      "courseCode": "A4",
-      "roomNo": "DB",
-      "name": "PDC BCS 5M",
-      "time": "08:00",
-      "ampm": "AM",
-      "teacher": "Basit Ali",
-      "day": "Wednesday",
-      "selected": false,
-    },
-    {
-      "degree": "BCS",
-      "semester": "Semester 5",
-      "section": "B",
-      "courseCode": "E1",
-      "roomNo": "GT",
-      "name": "GT BCS 5B",
-      "time": "10:00",
-      "ampm": "AM",
-      "teacher": "Dr Nazish Kanwal",
-      "day": "Wednesday",
-      "selected": false,
-    },
-    {
-      "degree": "BCS",
-      "semester": "Semester 3",
-      "section": "D",
-      "courseCode": "C18",
-      "roomNo": "LA",
-      "name": "LA BCS 3D",
-      "time": "01:00",
-      "ampm": "PM",
-      "teacher": "Muhammad Amjad",
-      "day": "Wednesday",
-      "selected": false,
-    },
-    {
-      "degree": "BAI",
-      "semester": "Semester 5",
-      "section": "A",
-      "courseCode": "E4",
-      "roomNo": "TBW",
-      "name": "AI BAI 5A",
-      "time": "02:00",
-      "ampm": "PM",
-      "teacher": "Javeria Ali",
-      "day": "Wednesday",
-      "selected": false,
-    },
-    {
-      "degree": "BCS",
-      "semester": "Semester 5",
-      "section": "M",
-      "courseCode": "CS Lab3",
-      "roomNo": "DB LAB",
-      "name": "DB LAB BCS 5M",
-      "time": "01:00",
-      "ampm": "PM",
-      "teacher": "Mubashir",
-      "day": "Wednesday",
-      "selected": false,
-    },
-  ];
+  Set<String> selectedCourseIds = {};
 
   @override
   void initState() {
     super.initState();
-    if (widget.selectedCourses != null) {
-      // Mark courses as selected if they were in the timetable
-      for (var course in allCourses) {
-        String courseIdentifier = '${course["courseCode"]}_${course["roomNo"]}';
-        if (widget.selectedCourses!.contains(courseIdentifier)) {
-          course["selected"] = true;
-        }
-      }
+    // Only initialize selected courses if the list is not null AND not empty
+    if (widget.selectedCourses != null && widget.selectedCourses!.isNotEmpty) {
+      selectedCourseIds.addAll(widget.selectedCourses!);
     }
-  }
-
-  // Load existing timetable data when initializing
-  Future<void> _loadExistingTimetableData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final timetableJson = prefs.getString('timetableData');
-    if (timetableJson != null) {
-      final decodedData = json.decode(timetableJson);
-      Map<String, List<Map<String, dynamic>>> existingData =
-          Map<String, List<Map<String, dynamic>>>.from(
-            decodedData.map(
-              (key, value) => MapEntry(
-                key,
-                (value as List)
-                    .map((item) => Map<String, dynamic>.from(item as Map))
-                    .toList(),
-              ),
-            ),
-          );
-
-      // Mark courses as selected based on existing timetable
-      for (var daySchedule in existingData.values) {
-        for (var scheduledCourse in daySchedule) {
-          for (var course in allCourses) {
-            if (course["courseCode"] == scheduledCourse["courseCode"] &&
-                course["roomNo"] == scheduledCourse["roomNo"]) {
-              setState(() {
-                course["selected"] = true;
-              });
-            }
-          }
-        }
-      }
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadExistingTimetableData();
+    // Fetch courses when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CourseProvider>(context, listen: false).fetchCourses();
+    });
   }
 
   List<Map<String, dynamic>> getFilteredCourses() {
-    return allCourses.where((course) {
-      return (selectedDegree.isEmpty || course["degree"] == selectedDegree) &&
-          (selectedSemester.isEmpty ||
-              course["semester"] == selectedSemester) &&
-          (selectedSection.isEmpty || course["section"] == selectedSection);
+    final courseProvider = Provider.of<CourseProvider>(context);
+    if (courseProvider.courses.isEmpty) return [];
+
+    return courseProvider.courses.where((course) {
+      final courseDegree =
+          course["degree"] as String? ?? ''; // Handle null with empty string
+      final courseSemester =
+          course["semester"] as String? ?? ''; // Handle null with empty string
+      final courseSection =
+          course["section"] as String? ?? ''; // Handle null with empty string
+
+      // If no filters are selected, show all courses
+      if (selectedDegree.isEmpty &&
+          selectedSemester.isEmpty &&
+          selectedSection.isEmpty) {
+        return true;
+      }
+
+      // If only degree is selected, show all courses of that degree
+      if (selectedDegree.isNotEmpty &&
+          selectedSemester.isEmpty &&
+          selectedSection.isEmpty) {
+        return courseDegree == selectedDegree;
+      }
+
+      // If degree and semester are selected, show courses matching both
+      if (selectedDegree.isNotEmpty &&
+          selectedSemester.isNotEmpty &&
+          selectedSection.isEmpty) {
+        return courseDegree == selectedDegree &&
+            courseSemester == selectedSemester;
+      }
+
+      // If all filters are selected, show only courses matching all criteria
+      if (selectedDegree.isNotEmpty &&
+          selectedSemester.isNotEmpty &&
+          selectedSection.isNotEmpty) {
+        return courseDegree == selectedDegree &&
+            courseSemester == selectedSemester &&
+            courseSection == selectedSection;
+      }
+
+      return false;
     }).toList();
   }
 
   void onSelectionChanged({String? degree, String? semester, String? section}) {
     setState(() {
       if (degree != null) {
-        selectedDegree = degree;
-        selectedSemester = "";
+        selectedDegree = degree; // Assign directly if not null
+        selectedSemester = ""; // Reset dependent filters
         selectedSection = "";
       } else if (semester != null) {
-        selectedSemester = semester;
-        selectedSection = "";
+        selectedSemester = semester; // Assign directly if not null
+        selectedSection = ""; // Reset dependent filters
       } else if (section != null) {
-        selectedSection = section;
+        selectedSection = section; // Assign directly if not null
+      }
+    });
+  }
+
+  void toggleCourseSelection(String courseId, bool selected) {
+    setState(() {
+      if (selected) {
+        selectedCourseIds.add(courseId);
+      } else {
+        selectedCourseIds.remove(courseId);
       }
     });
   }
 
   Future<void> _saveTimetableData() async {
+    final courseProvider = Provider.of<CourseProvider>(context, listen: false);
     final selectedCourses =
-        allCourses.where((course) => course["selected"]).toList();
+        courseProvider.courses.where((course) {
+          final courseId = course["_id"] as String?;
+          return courseId != null && selectedCourseIds.contains(courseId);
+        }).toList();
 
     // Create a timetable data structure organized by days
     Map<String, List<Map<String, String>>> timetableData = {};
@@ -239,16 +183,26 @@ class _AddCoursesScreenState extends State<AddCoursesScreen> {
 
     // Add selected courses to their designated days
     for (var course in selectedCourses) {
-      final day = course["day"] as String;
-      timetableData[day]!.add({
-        'courseCode': course["courseCode"] ?? '',
-        'roomNo': course["roomNo"] ?? '',
-        'section': course["degree"] + " " + course["section"],
-        'time': course["time"] ?? '',
-        'ampm': course["ampm"] ?? '',
-        'teacherName': course["teacher"] ?? '',
-        'isActive': 'false', // Will be determined by time in TimetableScreen
-      });
+      final schedule = course['schedule'] as List<dynamic>?;
+      if (schedule == null) continue;
+
+      for (var scheduleItem in schedule) {
+        final day = scheduleItem['day'] as String?;
+        if (day == null) continue;
+
+        timetableData[day]!.add({
+          'courseCode': course['code'] as String? ?? '',
+          'roomNo': scheduleItem['room'] as String? ?? '',
+          'section': course['short_form'] as String? ?? '',
+          'time': scheduleItem['startTime'] as String? ?? '',
+          'ampm':
+              (scheduleItem['startTime'] as String?)?.contains('PM') == true
+                  ? 'PM'
+                  : 'AM',
+          'teacherName': course['instructor'] as String? ?? '',
+          'isActive': 'false',
+        });
+      }
     }
 
     // Sort courses by time for each day
@@ -270,14 +224,12 @@ class _AddCoursesScreenState extends State<AddCoursesScreen> {
       });
     }
 
-    // Save to SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('timetableData', json.encode(timetableData));
-
     // Navigate to TimetableScreen
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => TimetableScreen()),
+      MaterialPageRoute(
+        builder: (context) => TimetableScreen(selectedCourses: selectedCourses),
+      ),
     );
   }
 
@@ -296,30 +248,72 @@ class _AddCoursesScreenState extends State<AddCoursesScreen> {
               onSave: _saveTimetableData,
             ),
             Expanded(
-              child: ListView.builder(
-                itemCount: getFilteredCourses().length,
-                itemBuilder: (context, index) {
-                  var course = getFilteredCourses()[index];
-                  return ListTile(
-                    leading: Checkbox(
-                      value: course["selected"],
-                      onChanged: (bool? value) {
-                        setState(() {
-                          course["selected"] = value!;
-                        });
-                      },
-                      activeColor: Color(0XFFC0EF7D),
-                      checkColor: Color(0xFF1F1D1E),
-                    ),
-                    title: Text(
-                      course["name"],
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(course["teacher"]),
-                    tileColor:
-                        course["selected"]
-                            ? Colors.transparent
-                            : Colors.transparent,
+              child: Consumer<CourseProvider>(
+                builder: (context, courseProvider, child) {
+                  if (courseProvider?.isLoading ?? false) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+
+                  if (courseProvider?.error != null) {
+                    return Center(child: Text(courseProvider!.error));
+                  }
+
+                  final courses = getFilteredCourses();
+                  if (courses.isEmpty) {
+                    return Center(child: Text('No courses available'));
+                  }
+
+                  return ListView.builder(
+                    itemCount: courses.length,
+                    itemBuilder: (context, index) {
+                      var course = courses[index];
+                      final courseId = course["_id"] as String?;
+                      if (courseId == null) return SizedBox.shrink();
+
+                      final isSelected = selectedCourseIds.contains(courseId);
+
+                      return ListTile(
+                        leading: Checkbox(
+                          value: isSelected,
+                          onChanged: (bool? value) {
+                            if (value != null) {
+                              toggleCourseSelection(courseId, value);
+                            }
+                          },
+                          activeColor: Color(0XFFC0EF7D),
+                          checkColor: Color(0xFF1F1D1E),
+                        ),
+                        title: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              // Short form + degree/semester/section
+                              '${course["short_form"] as String? ?? ""} '
+                              '${course["degree"] as String? ?? ""} '
+                              '${(course["semester"] as String?)?.replaceAll("Semester ", "") ?? ""}'
+                              '${course["section"] as String? ?? ""}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              course["instructor"] as String? ??
+                                  'Unknown Instructor',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                        tileColor:
+                            isSelected
+                                ? Color(0XFFC0EF7D).withOpacity(0.1)
+                                : Colors.transparent,
+                      );
+                    },
                   );
                 },
               ),

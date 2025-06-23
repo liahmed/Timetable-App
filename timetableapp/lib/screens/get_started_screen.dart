@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:timetableapp/screens/add_courses_screen.dart';
+import '../screens/add_courses_screen.dart';
 
 class GetStartedScreen extends StatelessWidget {
   const GetStartedScreen({super.key});

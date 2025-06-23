@@ -1,0 +1,87 @@
+[
+  {
+    "name": "Object Oriented Programming",
+    "code": "CS1004",
+    "credits": 3,
+    "instructor": "Bakhtawer",
+    "degree": "BCS",
+    "semester": "Semester 5",
+    "section": "Section A",
+    "schedule": [
+      {
+        "day": "Monday",
+        "startTime": "09:00",
+        "endTime": "12:55",
+        "room": "E-1 AB-1"
+      }
+    ]
+  },
+  {
+    "name": "Operating Systems",
+    "code": "CS2006",
+    "credits": 3,
+    "instructor": "Minhal Raza",
+    "degree": "BCS",
+    "semester": "Semester 5",
+    "section": "Section A",
+    "schedule": [
+      {
+        "day": "Monday",
+        "startTime": "09:00",
+        "endTime": "12:55",
+        "room": "E-2 AB-1"
+      }
+    ]
+  },
+  {
+    "name": "Design and Analysis of Algorithms",
+    "code": "CS2009",
+    "credits": 3,
+    "instructor": "Syed Faisal Ali",
+    "degree": "BCS",
+    "semester": "Semester 5",
+    "section": "Section A",
+    "schedule": [
+      {
+        "day": "Monday",
+        "startTime": "09:00",
+        "endTime": "12:55",
+        "room": "E-3 AB-1"
+      }
+    ]
+  },
+  {
+    "name": "Operating Systems Lab",
+    "code": "CL2006",
+    "credits": 1,
+    "instructor": "Fatima Gado",
+    "degree": "BCS",
+    "semester": "Semester 5",
+    "section": "Section A",
+    "schedule": [
+      {
+        "day": "Monday",
+        "startTime": "13:00",
+        "endTime": "15:55",
+        "room": "Lab-1 AB-1"
+      }
+    ]
+  },
+  {
+    "name": "Object Oriented Programming Lab",
+    "code": "CL1004",
+    "credits": 1,
+    "instructor": "Zainab",
+    "degree": "BCS",
+    "semester": "Semester 5",
+    "section": "Section A",
+    "schedule": [
+      {
+        "day": "Monday",
+        "startTime": "13:00",
+        "endTime": "15:55",
+        "room": "Lab-2 AB-1"
+      }
+    ]
+  }
+] 

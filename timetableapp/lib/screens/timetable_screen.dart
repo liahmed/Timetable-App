@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:provider/provider.dart';
+import 'package:Track/providers/course_provider.dart';
 import 'dart:async';
-
-import 'package:timetableapp/screens/add_courses_screen.dart';
+import 'package:Track/screens/add_courses_screen.dart';
 
 class TimetableScreen extends StatefulWidget {
+  final List<Map<String, dynamic>>? selectedCourses;
+
+  const TimetableScreen({Key? key, this.selectedCourses}) : super(key: key);
+
   @override
   _TimetableScreenState createState() => _TimetableScreenState();
 }
@@ -26,8 +29,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
     "Weekend",
   ];
 
-  Map<String, List<Map<String, String>>> timetableData = {};
-
   @override
   void initState() {
     super.initState();
@@ -44,7 +45,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
         });
       }
     });
-    _loadTimetableData();
+
+    // Load courses from database
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CourseProvider>(context, listen: false).fetchCourses();
+    });
 
     // Setup timer to refresh every minute to update active classes
     _refreshTimer = Timer.periodic(Duration(minutes: 1), (timer) {
@@ -56,6 +61,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
   int _getCurrentDayIndex() {
     final now = DateTime.now();
     final currentWeekday = now.weekday;
@@ -64,136 +76,118 @@ class _TimetableScreenState extends State<TimetableScreen> {
         : 6;
   }
 
-  Future<void> _loadTimetableData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final timetableJson = prefs.getString('timetableData');
-    if (timetableJson != null) {
-      try {
-        final decodedData = json.decode(timetableJson);
-        setState(() {
-          timetableData = Map<String, List<Map<String, String>>>.from(
-            decodedData.map(
-              (key, value) => MapEntry(
-                key,
-                (value as List)
-                    .map((item) => Map<String, String>.from(item as Map))
-                    .toList(),
-              ),
-            ),
-          );
-        });
-        print("Loaded timetable data: $timetableData"); // Debug print
-      } catch (e) {
-        print("Error parsing timetable data: $e");
-        // Initialize with empty data on error
-        timetableData = {for (var day in days) day: []};
-      }
-    } else {
-      print("No timetable data found in SharedPreferences");
-    }
-  }
-
   // Check if class is currently active
-  bool _isClassActive(String timeStr, String ampm) {
+  bool _isClassActive(String startTime, String endTime) {
     final now = DateTime.now();
-
-    // Parse class time
-    final timeParts = timeStr.split(':');
-    if (timeParts.length != 2) return false;
-
-    int hours = int.tryParse(timeParts[0]) ?? 0;
-    final minutes = int.tryParse(timeParts[1]) ?? 0;
-
-    // Convert to 24-hour format
-    if (ampm == 'PM' && hours < 12) {
-      hours += 12;
-    } else if (ampm == 'AM' && hours == 12) {
-      hours = 0;
-    }
-
-    // Create class start and end DateTime (assuming 1-hour classes)
-    final classStart = DateTime(now.year, now.month, now.day, hours, minutes);
-    final classEnd = classStart.add(Duration(hours: 1));
-
-    // Check if current time is within class time
-    return now.isAfter(classStart) && now.isBefore(classEnd);
+    final currentTime =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    return currentTime.compareTo(startTime) >= 0 &&
+        currentTime.compareTo(endTime) <= 0;
   }
 
-  Widget _buildTimeSlot(Map<String, String> schedule, String day) {
-    // Determine if class is active based on time
-    final isActive = _isClassActive(
-      schedule['time'] ?? '00:00',
-      schedule['ampm'] ?? 'AM',
+  Widget _buildTimeSlotGridItem(
+    Map<String, dynamic> course,
+    String currentDay,
+  ) {
+    final schedule = (course['schedule'] as List<dynamic>?)?.firstWhere(
+      (s) => s['day'] == currentDay,
+      orElse: () => null,
     );
 
+    if (schedule == null) return SizedBox.shrink();
+
+    final isActive =
+        days[_getCurrentDayIndex()] == currentDay &&
+        _isClassActive(schedule['startTime'], schedule['endTime']);
+
+    // Extract details with null-safety
+    final String courseCode = course['code'] as String? ?? '';
+    final String roomNo = schedule['room'] as String? ?? '';
+    final String degree = course['degree'] as String? ?? '';
+    final String semester =
+        (course['semester'] as String?)?.replaceAll('Semester ', '') ?? '';
+    final String section = course['section'] as String? ?? '';
+    final String startTime = schedule['startTime'] as String? ?? '';
+    final String ampm = (schedule['ampm'] as String?)?.toUpperCase() ?? '';
+    final String instructor = course['instructor'] as String? ?? '';
+
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isActive ? Color(0xFFC0EF7D) : Colors.white,
         border: Border.all(color: Color(0xFFC0EF7D), width: 1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Room and Course Code
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      schedule['courseCode'] ?? '',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      schedule['roomNo'] ?? '',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                Text(
+                  roomNo,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isActive ? Colors.black : Colors.black87,
+                  ),
+                ),
+                Text(
+                  course['short_form'] as String? ?? '',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isActive ? Colors.black : Colors.black87,
+                  ),
                 ),
               ],
             ),
-            SizedBox(height: 4),
+            // Degree, Semester, Section
             Text(
-              schedule['section'] ?? '',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              '$degree $semester$section',
+              style: TextStyle(
+                fontSize: 13,
+                color: isActive ? Colors.black54 : Colors.black54,
+              ),
             ),
-            SizedBox(height: 12),
+            Spacer(),
+            // Time
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  schedule['time'] ?? '',
+                  startTime,
                   style: TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.bold,
                     height: 0.9,
+                    letterSpacing: -1,
+                    color: isActive ? Colors.black : Colors.black87,
                   ),
                 ),
-                SizedBox(width: 2),
+                SizedBox(width: 4),
                 Padding(
-                  padding: EdgeInsets.only(bottom: 2),
+                  padding: EdgeInsets.only(bottom: 8),
                   child: Text(
-                    schedule['ampm'] ?? '',
-                    style: TextStyle(fontSize: 16, color: Colors.black87),
+                    ampm,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isActive ? Colors.black : Colors.black87,
+                    ),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: 4),
+            // Teacher name
             Text(
-              schedule['teacherName'] ?? '',
-              style: TextStyle(fontSize: 16, color: Colors.black87),
+              instructor,
+              style: TextStyle(
+                fontSize: 14,
+                color: isActive ? Colors.black : Colors.black87,
+              ),
             ),
           ],
         ),
@@ -201,54 +195,33 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-  List<Map<String, String>> _getDefaultTimeSlots() {
-    return [
-      {
-        'courseCode': 'A4',
-        'roomNo': 'DB',
-        'section': 'BCS 5M',
-        'time': '08:00',
-        'ampm': 'AM',
-        'teacherName': 'Basit Ali',
-        'isActive': 'true',
-      },
-      {
-        'courseCode': 'E1',
-        'roomNo': 'GT',
-        'section': 'BCS 5B',
-        'time': '10:00',
-        'ampm': 'AM',
-        'teacherName': 'Dr Nazish Kanwal',
-        'isActive': 'false',
-      },
-      {
-        'courseCode': 'C18',
-        'roomNo': 'LA',
-        'section': 'BCS 3D',
-        'time': '01:00',
-        'ampm': 'PM',
-        'teacherName': 'Muhammad Amjad',
-        'isActive': 'false',
-      },
-      {
-        'courseCode': 'E4',
-        'roomNo': 'TBW',
-        'section': 'BAI 5A',
-        'time': '02:00',
-        'ampm': 'PM',
-        'teacherName': 'Javeria Ali',
-        'isActive': 'false',
-      },
-      {
-        'courseCode': 'CS Lab3',
-        'roomNo': 'DB LAB',
-        'section': 'BCS 5M',
-        'time': '01:00',
-        'ampm': 'PM',
-        'teacherName': 'Mubashir',
-        'isActive': 'false',
-      },
-    ];
+  List<String> _getCurrentCourses() {
+    final courseProvider = Provider.of<CourseProvider>(context, listen: false);
+    List<String> currentCourseIds = [];
+    for (var course in courseProvider.courses) {
+      final courseId = course['_id'] as String?;
+      if (courseId != null) {
+        currentCourseIds.add(courseId);
+      }
+    }
+    return currentCourseIds;
+  }
+
+  void _navigateToAddCoursesScreen() {
+    // Only pass selected courses if any were selected, otherwise pass an empty list
+    final selectedCourses = widget.selectedCourses;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => AddCoursesScreen(
+              selectedCourses:
+                  (selectedCourses != null && selectedCourses.isNotEmpty)
+                      ? selectedCourses.map((c) => c['_id'] as String).toList()
+                      : <String>[],
+            ),
+      ),
+    );
   }
 
   @override
@@ -293,17 +266,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   // Add button
                   IconButton(
                     icon: Icon(Icons.add, color: Color(0xFFC0EF7D), size: 28),
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) => AddCoursesScreen(
-                                selectedCourses: _getCurrentCourses(),
-                              ),
-                        ),
-                      );
-                    },
+                    onPressed: _navigateToAddCoursesScreen,
                   ),
                 ],
               ),
@@ -333,38 +296,97 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
             // Single PageView for both day text and timetable
             Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: days.length,
-                physics: RangeMaintainingScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final day = days[index];
-                  final daySchedule = timetableData[day] ?? [];
-                  final slotsToShow =
-                      timetableData.isEmpty ||
-                              (timetableData.values.every(
-                                (list) => list.isEmpty,
-                              ))
-                          ? _getDefaultTimeSlots()
-                          : daySchedule;
+              child: Consumer<CourseProvider>(
+                builder: (context, courseProvider, child) {
+                  if (courseProvider.isLoading) {
+                    return Center(child: CircularProgressIndicator());
+                  }
 
-                  return Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: GridView.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 1,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
-                      itemCount: slotsToShow.length,
-                      itemBuilder: (context, slotIndex) {
-                        return _buildTimeSlotGridItem(
-                          slotsToShow[slotIndex],
-                          day,
-                        );
-                      },
-                    ),
+                  if (courseProvider.error.isNotEmpty) {
+                    return Center(
+                      child: Text('Error: ${courseProvider.error}'),
+                    );
+                  }
+
+                  return PageView.builder(
+                    controller: _pageController,
+                    itemCount: days.length,
+                    physics: RangeMaintainingScrollPhysics(),
+                    itemBuilder: (context, index) {
+                      final day = days[index];
+                      List<Map<String, dynamic>> dayCourses;
+
+                      if (widget.selectedCourses != null &&
+                          widget.selectedCourses!.isNotEmpty) {
+                        // Show only selected courses
+                        dayCourses =
+                            widget.selectedCourses!.where((course) {
+                              return (course['schedule'] as List<dynamic>?)
+                                      ?.any((s) => s['day'] == day) ??
+                                  false;
+                            }).toList();
+                      } else {
+                        // If no courses are selected, show all available courses
+                        dayCourses =
+                            courseProvider.courses.where((course) {
+                              return (course['schedule'] as List<dynamic>?)
+                                      ?.any((s) => s['day'] == day) ??
+                                  false;
+                            }).toList();
+                      }
+
+                      dayCourses.sort((a, b) {
+                        final scheduleA = (a['schedule'] as List<dynamic>?)
+                            ?.firstWhere(
+                              (s) => s['day'] == day,
+                              orElse: () => null,
+                            );
+                        final scheduleB = (b['schedule'] as List<dynamic>?)
+                            ?.firstWhere(
+                              (s) => s['day'] == day,
+                              orElse: () => null,
+                            );
+
+                        if (scheduleA == null || scheduleB == null) return 0;
+
+                        String startTimeA =
+                            scheduleA['startTime'] as String? ?? '';
+                        String startTimeB =
+                            scheduleB['startTime'] as String? ?? '';
+
+                        // Convert times to comparable format (HH:MM)
+                        int timeToMinutes(String time) {
+                          if (time.isEmpty) return 0;
+                          final parts = time.split(':');
+                          if (parts.length != 2) return 0;
+                          return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+                        }
+
+                        return timeToMinutes(
+                          startTimeA,
+                        ).compareTo(timeToMinutes(startTimeB));
+                      });
+
+                      return Padding(
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: GridView.builder(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 1,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                          itemCount: dayCourses.length,
+                          itemBuilder: (context, courseIndex) {
+                            return _buildTimeSlotGridItem(
+                              dayCourses[courseIndex],
+                              day,
+                            );
+                          },
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -376,117 +398,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
               child: Text(
                 "Limupani Studios ©",
                 style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                // textAlign: TextAlign.left,
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  // New method for grid item time slots
-  Widget _buildTimeSlotGridItem(
-    Map<String, String> schedule,
-    String currentDay,
-  ) {
-    final isActive =
-        days[_getCurrentDayIndex()] == currentDay &&
-        _isClassActive(schedule['time'] ?? '00:00', schedule['ampm'] ?? 'AM');
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isActive ? Color(0xFFC0EF7D) : Colors.white,
-        border: Border.all(color: Color(0xFFC0EF7D), width: 1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Course code and room
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  schedule['courseCode'] ?? '',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                Text(
-                  schedule['roomNo'] ?? '',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-            // Section
-            Text(
-              schedule['section'] ?? '',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-            Spacer(),
-            // Time
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  schedule['time'] ?? '',
-                  style: TextStyle(
-                    fontSize: 42,
-                    fontWeight: FontWeight.bold,
-                    height: 0.9,
-                    letterSpacing: -1,
-                  ),
-                ),
-                SizedBox(width: 4),
-                Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    schedule['ampm'] ?? '',
-                    style: TextStyle(fontSize: 14, color: Colors.black87),
-                  ),
-                ),
-              ],
-            ),
-            // Teacher name
-            Text(
-              schedule['teacherName'] ?? '',
-              style: TextStyle(fontSize: 14, color: Colors.black87),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Add this method to get currently displayed courses
-  List<String> _getCurrentCourses() {
-    List<String> currentCourses = [];
-    for (var day in days) {
-      if (timetableData[day] != null) {
-        for (var course in timetableData[day]!) {
-          String courseIdentifier =
-              '${course['courseCode']}_${course['roomNo']}';
-          currentCourses.add(courseIdentifier);
-        }
-      }
-    }
-    return currentCourses;
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    _pageController.dispose();
-    super.dispose();
   }
 }

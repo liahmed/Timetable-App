@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # timetableapp
 
 A new Flutter project.
@@ -14,3 +15,6 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# my-app
+>>>>>>> be1a6c2b1037177167d64fa5091032ced9381694
